@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 
-from bincrafters import build_template_default
-import os
+from cpt.packager import ConanMultiPackager
+
 
 if __name__ == "__main__":
 
-    builder = build_template_default.get_builder(pure_c=False)
-
+    builder = ConanMultiPackager(username="reich")
+    builder.add_common_builds(pure_c=False)
     builder.run()
