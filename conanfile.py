@@ -7,7 +7,7 @@ from conans import ConanFile, CMake, tools
 
 class IMGUIConan(ConanFile):
     name = "imgui"
-    version = "1.67"
+    version = "1.71"
     description = "Bloat-free Immediate Mode Graphical User interface for C++ with minimal dependencies"
     topics = ("conan", "imgui", "c++")
     url = "https://github.com/giladreich/conan-imgui"
@@ -19,24 +19,24 @@ class IMGUIConan(ConanFile):
     generators = "cmake"
     settings = "os", "arch", "compiler", "build_type"
     options = dict({
-        "shared": [True, False],
-        "fPIC": [True, False],
+        "static": [True, False],
 
         "with_impl": [True, False],
         "dx9": [True, False],
         "dx10": [True, False],
         "dx11": [True, False],
-        "dx12": [True, False]
+        "dx12": [True, False],
+        "glfw_opengl3": [True, False]
     })
     default_options = dict({
-        "shared": False,
-        "fPIC": True,
+        "static": True,
 
         "with_impl": False,
         "dx9": False,
         "dx10": False,
         "dx11": False,
-        "dx12": False
+        "dx12": False,
+        "glfw_opengl3": False
     })
 
     # Custom attributes
@@ -45,9 +45,15 @@ class IMGUIConan(ConanFile):
 
 
 
-    def config_options(self):
-        if self.settings.os == 'Windows':
-            del self.options.fPIC
+    def configure(self):
+        self.dependent_options()
+
+
+    def dependent_options(self):
+        if self.options.dx9 or self.options.dx10 or self.options.dx11 or self.options.dx12 or self.options.glfw_opengl3:
+            self.options.with_impl = True
+        else:
+            self.options.with_impl = False
 
 
     def source(self):
@@ -67,24 +73,25 @@ class IMGUIConan(ConanFile):
 
     def _configure_cmake(self):
         cmake = CMake(self)
-        if self.options.shared:
-            cmake.definitions["IMGUI_STATIC_LIBRARY"] = "OFF"
-        if self.options.with_impl and tools.os_info.is_windows:
-            cmake.definitions["IMGUI_WITH_IMPL"] = "ON"
-            if self.options.dx9:
-                cmake.definitions["IMGUI_IMPL_DX9"] = "ON"
-            elif self.options.dx10:
-                cmake.definitions["IMGUI_IMPL_DX10"] = "ON"
-            elif self.options.dx11:
-                cmake.definitions["IMGUI_IMPL_DX11"] = "ON"
+        cmake.definitions["IMGUI_STATIC_LIBRARY"] = "ON" if self.options.static else "OFF"
+        cmake.definitions["IMGUI_WITH_IMPL"]      = "ON" if self.options.with_impl else "OFF"
+        
+        if tools.os_info.is_windows:
+            if   self.options.dx9:  cmake.definitions["IMGUI_IMPL_DX9" ] = "ON"
+            elif self.options.dx10: cmake.definitions["IMGUI_IMPL_DX10"] = "ON"
+            elif self.options.dx11: cmake.definitions["IMGUI_IMPL_DX11"] = "ON"
             elif self.options.dx12:
-                cmake.definitions["IMGUI_IMPL_DX12"] = "ON"
-            else:
-                self.output.warn("[WARNING] 'with_impl' option is set to True but no graphic api selected(dx9, dx10 etc..). See 'CMakeOptions.cmake'.")
+                if self.settings.arch == "x86_64":
+                    cmake.definitions["IMGUI_IMPL_DX12"] = "ON"
+                else:
+                    raise Exception("Current ImGui state requires x64 bit architecture for building DirectX 12.")
+        elif self.options.glfw_opengl3:
+            cmake.definitions["IMGUI_IMPL_GLFW_OPENGL3"] = "ON"
         else:
-            cmake.definitions["IMGUI_WITH_IMPL"] = "OFF"
+            self.output.warn("[WARNING] 'with_impl' option is set to True but no graphic api selected(dx9, dx10 etc..). See 'CMakeOptions.cmake'.")
 
         cmake.configure(build_dir=self._build_subfolder)
+
         return cmake
 
 
@@ -109,6 +116,6 @@ class IMGUIConan(ConanFile):
 
 
     def package_info(self):
-        if self.settings.os == "Windows":
+        if tools.os_info.is_windows:
             self.env_info.path.append(os.path.join(self.package_folder, "bin"))
         self.cpp_info.libs = tools.collect_libs(self)
